@@ -14,6 +14,8 @@ let sweepPos = 0;
 let sweepBufferSize = 0;
 let paused = false;
 let peakIndices = [];
+let threshold = 0.2;
+let peakCircles = [];
 
 const startStopBtn = document.getElementById('startStopBtn');
 const audioCanvas = document.getElementById('audioCanvas');
@@ -24,6 +26,13 @@ const evennessCanvas = document.getElementById('evennessIndicator');
 const evennessCtx = evennessCanvas.getContext('2d');
 const evennessLabel = document.getElementById('evennessLabel');
 const pauseBtn = document.getElementById('pauseBtn');
+
+const thresholdSlider = document.getElementById('thresholdSlider');
+const thresholdValue = document.getElementById('thresholdValue');
+thresholdSlider.addEventListener('input', () => {
+  threshold = parseFloat(thresholdSlider.value);
+  thresholdValue.textContent = threshold.toFixed(2);
+});
 
 startStopBtn.addEventListener('click', () => {
   if (!running) {
@@ -62,6 +71,8 @@ async function startAudio() {
     sweepBufferSize = audioCanvas.width;
     sweepBuffer = new Array(sweepBufferSize).fill(0);
     sweepPos = 0;
+    peakIndices = [];
+    peakCircles = [];
     draw();
   } catch (err) {
     alert('Microphone access denied or not available.');
@@ -87,6 +98,8 @@ function stopAudio() {
   sweepBuffer = [];
   sweepPos = 0;
   sweepBufferSize = 0;
+  peakIndices = [];
+  peakCircles = [];
 }
 
 function draw() {
@@ -109,7 +122,7 @@ function draw() {
     // Map x=0 to oldest, x=width-1 to newest
     const bufferIdx = (sweepPos + 1 + x) % sweepBufferSize;
     const v = sweepBuffer[bufferIdx];
-    const y = (1 - v) * audioCanvas.height / 2;
+    const y = (1 - v) * audioCanvas.height;
     if (x === 0) {
       canvasCtx.moveTo(x, y);
     } else {
@@ -120,6 +133,9 @@ function draw() {
   canvasCtx.strokeStyle = '#00ff99';
   canvasCtx.stroke();
 
+  // Draw threshold line
+  drawThresholdLine();
+
   // Draw circles for detected peaks
   drawPeakCircles();
 
@@ -129,21 +145,35 @@ function draw() {
   animationId = requestAnimationFrame(draw);
 }
 
+function drawThresholdLine() {
+  // Use the same y-mapping as the waveform (full height)
+  const y = (1 - threshold) * audioCanvas.height;
+  canvasCtx.beginPath();
+  canvasCtx.moveTo(0, y);
+  canvasCtx.lineTo(audioCanvas.width, y);
+  canvasCtx.lineWidth = 1.5;
+  canvasCtx.strokeStyle = '#ff4136';
+  canvasCtx.setLineDash([8, 8]);
+  canvasCtx.stroke();
+  canvasCtx.setLineDash([]);
+}
+
 function detectTicks(dataArray) {
-  // Simple peak detection: look for sharp upward spikes
+  // Use the live threshold for peak detection
   const now = audioContext.currentTime;
-  const threshold = 200; // Adjust as needed for sensitivity
   let peakDetected = false;
   let max = 0;
+  let maxIdx = -1;
   for (let i = 1; i < dataArray.length - 1; i++) {
-    // Find local maxima above threshold
+    const v = Math.abs((dataArray[i] - 128) / 128);
     if (
-      dataArray[i] > threshold &&
-      dataArray[i] > dataArray[i - 1] &&
-      dataArray[i] > dataArray[i + 1]
+      v > threshold &&
+      v > Math.abs((dataArray[i - 1] - 128) / 128) &&
+      v > Math.abs((dataArray[i + 1] - 128) / 128)
     ) {
-      if (dataArray[i] > max) {
-        max = dataArray[i];
+      if (v > max) {
+        max = v;
+        maxIdx = i;
       }
       peakDetected = true;
     }
@@ -152,8 +182,8 @@ function detectTicks(dataArray) {
   if (peakDetected && (now - lastPeakTime > 0.2)) { // 200ms min interval
     lastPeakTime = now;
     peakTimes.push(now);
-    // Store the sweep buffer index for the peak
-    peakIndices.push(sweepPos);
+    // Store the canvas x position and value for the peak
+    peakCircles.push({ x: audioCanvas.width - 1, value: max });
     updateIntervals();
   }
 }
@@ -222,20 +252,15 @@ function clearCanvas() {
 }
 
 function drawPeakCircles() {
-  // Only keep peaks that are still visible in the buffer
-  peakIndices = peakIndices.filter(idx => {
-    // Calculate how far this peak is from the current sweepPos
-    let delta = (sweepPos - idx + sweepBufferSize) % sweepBufferSize;
-    return delta < sweepBufferSize;
+  // Move circles left and only keep those still on screen
+  peakCircles = peakCircles.filter(c => {
+    c.x -= 1;
+    return c.x >= 0;
   });
-  for (const idx of peakIndices) {
-    // Calculate x position: how far from the oldest sample
-    let x = (idx - (sweepPos + 1) + sweepBufferSize) % sweepBufferSize;
-    if (x < 0 || x >= sweepBufferSize || x >= audioCanvas.width) continue;
-    const v = sweepBuffer[idx];
-    const y = (1 - v) * audioCanvas.height / 2;
+  for (const c of peakCircles) {
+    const y = (1 - c.value) * audioCanvas.height;
     canvasCtx.beginPath();
-    canvasCtx.arc(x, y, 8, 0, 2 * Math.PI);
+    canvasCtx.arc(c.x, y, 8, 0, 2 * Math.PI);
     canvasCtx.fillStyle = '#FF851B';
     canvasCtx.globalAlpha = 0.7;
     canvasCtx.fill();
