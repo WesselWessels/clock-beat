@@ -6,7 +6,7 @@ body {
 }
 
 .container {
-  max-width: 700px;
+  max-width: 1300px;
   margin: 40px auto;
   background: #fff;
   border-radius: 8px;
@@ -40,6 +40,27 @@ h1 {
   margin: 0 auto 24px auto;
   background: #222;
   border-radius: 4px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Add horizontal scroll for small screens */
+@media (max-width: 1250px) {
+  .container {
+    max-width: 100vw;
+    padding: 16px 2px;
+  }
+  #audioCanvas {
+    width: 1200px;
+    min-width: 800px;
+  }
+  body {
+    overflow-x: auto;
+  }
+}
+
+#evennessIndicatorContainer {
+  margin-bottom: 16px;
 }
 
 #results {

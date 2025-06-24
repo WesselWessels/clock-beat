@@ -10,7 +10,12 @@
   <div class="container">
     <h1>Clock Tick/Tock Diagnostic Tool</h1>
     <button id="startStopBtn">Start</button>
-    <canvas id="audioCanvas" width="600" height="100"></canvas>
+    <button id="pauseBtn" style="margin-left: 10px;">Pause</button>
+    <canvas id="audioCanvas" width="1200" height="300"></canvas>
+    <div id="evennessIndicatorContainer" style="text-align:center; margin-bottom:16px;">
+      <canvas id="evennessIndicator" width="40" height="40" style="vertical-align:middle;"></canvas>
+      <span id="evennessLabel" style="font-size:1.1em; margin-left:10px; vertical-align:middle;"></span>
+    </div>
     <div id="results">
       <h2>Results</h2>
       <div id="intervals"></div>

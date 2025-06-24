@@ -3,18 +3,40 @@ let analyser;
 let microphone;
 let animationId;
 let running = false;
+let lastPeakTime = 0;
+let peakTimes = [];
+let lastPeakValue = 0;
+let waveformBuffer = [];
+let waveformWritePos = 0;
+const waveformHistorySeconds = 4; // Show last 4 seconds
+let sweepBuffer = [];
+let sweepPos = 0;
+let sweepBufferSize = 0;
+let paused = false;
 
 const startStopBtn = document.getElementById('startStopBtn');
 const audioCanvas = document.getElementById('audioCanvas');
 const intervalsDiv = document.getElementById('intervals');
 const analysisDiv = document.getElementById('analysis');
 const canvasCtx = audioCanvas.getContext('2d');
+const evennessCanvas = document.getElementById('evennessIndicator');
+const evennessCtx = evennessCanvas.getContext('2d');
+const evennessLabel = document.getElementById('evennessLabel');
+const pauseBtn = document.getElementById('pauseBtn');
 
 startStopBtn.addEventListener('click', () => {
   if (!running) {
     startAudio();
   } else {
     stopAudio();
+  }
+});
+
+pauseBtn.addEventListener('click', () => {
+  paused = !paused;
+  pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  if (!paused) {
+    draw();
   }
 });
 
@@ -28,8 +50,18 @@ async function startAudio() {
     microphone.connect(analyser);
     running = true;
     startStopBtn.textContent = 'Stop';
+    peakTimes = [];
+    lastPeakTime = 0;
+    lastPeakValue = 0;
+    // Circular buffer setup
+    const maxSamples = Math.floor(audioContext.sampleRate * waveformHistorySeconds);
+    waveformBuffer = new Float32Array(maxSamples);
+    waveformWritePos = 0;
+    // Deterministic sweep buffer: one sample per pixel
+    sweepBufferSize = audioCanvas.width;
+    sweepBuffer = new Array(sweepBufferSize).fill(0);
+    sweepPos = 0;
     draw();
-    // TODO: Add tick/tock detection and interval analysis
   } catch (err) {
     alert('Microphone access denied or not available.');
   }
@@ -48,32 +80,135 @@ function stopAudio() {
   clearCanvas();
   intervalsDiv.textContent = '';
   analysisDiv.textContent = '';
+  peakTimes = [];
+  waveformBuffer = [];
+  waveformWritePos = 0;
+  sweepBuffer = [];
+  sweepPos = 0;
+  sweepBufferSize = 0;
 }
 
 function draw() {
-  if (!analyser) return;
+  if (!analyser || paused) return;
   const bufferLength = analyser.fftSize;
   const dataArray = new Uint8Array(bufferLength);
   analyser.getByteTimeDomainData(dataArray);
 
+  // Write only the latest sample to the sweep buffer
+  const latest = (dataArray[bufferLength - 1] - 128) / 128;
+  sweepBuffer[sweepPos] = Math.abs(latest);
+  sweepPos = (sweepPos + 1) % sweepBufferSize;
+
+  // Always clear the canvas
   canvasCtx.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
+
+  // Draw the sweep line: left = oldest, right = newest, one sample per pixel
   canvasCtx.beginPath();
-  const sliceWidth = audioCanvas.width / bufferLength;
-  let x = 0;
-  for (let i = 0; i < bufferLength; i++) {
-    const v = dataArray[i] / 128.0;
-    const y = (v * audioCanvas.height) / 2;
-    if (i === 0) {
+  for (let x = 0; x < audioCanvas.width; x++) {
+    // Map x=0 to oldest, x=width-1 to newest
+    const bufferIdx = (sweepPos + 1 + x) % sweepBufferSize;
+    const v = sweepBuffer[bufferIdx];
+    const y = (1 - v) * audioCanvas.height / 2;
+    if (x === 0) {
       canvasCtx.moveTo(x, y);
     } else {
       canvasCtx.lineTo(x, y);
     }
-    x += sliceWidth;
   }
   canvasCtx.lineWidth = 2;
   canvasCtx.strokeStyle = '#00ff99';
   canvasCtx.stroke();
+
+  // Tick/tock detection
+  detectTicks(dataArray);
+
   animationId = requestAnimationFrame(draw);
+}
+
+function detectTicks(dataArray) {
+  // Simple peak detection: look for sharp upward spikes
+  const now = audioContext.currentTime;
+  const threshold = 200; // Adjust as needed for sensitivity
+  let peakDetected = false;
+  let max = 0;
+  for (let i = 1; i < dataArray.length - 1; i++) {
+    // Find local maxima above threshold
+    if (
+      dataArray[i] > threshold &&
+      dataArray[i] > dataArray[i - 1] &&
+      dataArray[i] > dataArray[i + 1]
+    ) {
+      if (dataArray[i] > max) {
+        max = dataArray[i];
+      }
+      peakDetected = true;
+    }
+  }
+  // Debounce: only register a new peak if enough time has passed
+  if (peakDetected && (now - lastPeakTime > 0.2)) { // 200ms min interval
+    lastPeakTime = now;
+    peakTimes.push(now);
+    updateIntervals();
+  }
+}
+
+function updateIntervals() {
+  if (peakTimes.length < 2) {
+    intervalsDiv.textContent = 'Waiting for more ticks/tocks...';
+    analysisDiv.textContent = '';
+    updateEvennessIndicator(null);
+    return;
+  }
+  // Calculate intervals in ms
+  const intervals = [];
+  for (let i = 1; i < peakTimes.length; i++) {
+    intervals.push(((peakTimes[i] - peakTimes[i - 1]) * 1000).toFixed(1));
+  }
+  intervalsDiv.textContent = 'Intervals (ms): ' + intervals.join(', ');
+  // Analyze evenness (last 6 intervals)
+  let stddev = null;
+  if (intervals.length >= 2) {
+    const lastN = intervals.slice(-6).map(Number);
+    const mean = lastN.reduce((a, b) => a + b, 0) / lastN.length;
+    const variance = lastN.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / lastN.length;
+    stddev = Math.sqrt(variance);
+    analysisDiv.textContent = `Mean: ${mean.toFixed(1)} ms, Std Dev: ${stddev.toFixed(2)} ms`;
+  }
+  updateEvennessIndicator(stddev);
+}
+
+function updateEvennessIndicator(stddev) {
+  // Clear
+  evennessCtx.clearRect(0, 0, evennessCanvas.width, evennessCanvas.height);
+  let color = '#ccc';
+  let label = 'Waiting...';
+
+  // Check for recent tick/tock
+  const now = audioContext ? audioContext.currentTime : 0;
+  if (peakTimes.length === 0 || (now - lastPeakTime > 2)) {
+    color = '#888';
+    label = 'No ticks detected';
+  } else if (stddev !== null) {
+    if (stddev < 10) {
+      color = '#2ecc40'; // green
+      label = 'Even';
+    } else if (stddev < 30) {
+      color = '#ffdc00'; // yellow
+      label = 'Slightly uneven';
+    } else {
+      color = '#ff4136'; // red
+      label = 'Uneven';
+    }
+  }
+  // Draw circle
+  evennessCtx.beginPath();
+  evennessCtx.arc(20, 20, 16, 0, 2 * Math.PI);
+  evennessCtx.fillStyle = color;
+  evennessCtx.fill();
+  evennessCtx.lineWidth = 2;
+  evennessCtx.strokeStyle = '#888';
+  evennessCtx.stroke();
+  evennessLabel.textContent = label;
 }
 
 function clearCanvas() {
