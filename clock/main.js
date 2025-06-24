@@ -13,6 +13,7 @@ let sweepBuffer = [];
 let sweepPos = 0;
 let sweepBufferSize = 0;
 let paused = false;
+let peakIndices = [];
 
 const startStopBtn = document.getElementById('startStopBtn');
 const audioCanvas = document.getElementById('audioCanvas');
@@ -119,6 +120,9 @@ function draw() {
   canvasCtx.strokeStyle = '#00ff99';
   canvasCtx.stroke();
 
+  // Draw circles for detected peaks
+  drawPeakCircles();
+
   // Tick/tock detection
   detectTicks(dataArray);
 
@@ -148,6 +152,8 @@ function detectTicks(dataArray) {
   if (peakDetected && (now - lastPeakTime > 0.2)) { // 200ms min interval
     lastPeakTime = now;
     peakTimes.push(now);
+    // Store the sweep buffer index for the peak
+    peakIndices.push(sweepPos);
     updateIntervals();
   }
 }
@@ -213,4 +219,29 @@ function updateEvennessIndicator(stddev) {
 
 function clearCanvas() {
   canvasCtx.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
+}
+
+function drawPeakCircles() {
+  // Only keep peaks that are still visible in the buffer
+  peakIndices = peakIndices.filter(idx => {
+    // Calculate how far this peak is from the current sweepPos
+    let delta = (sweepPos - idx + sweepBufferSize) % sweepBufferSize;
+    return delta < sweepBufferSize;
+  });
+  for (const idx of peakIndices) {
+    // Calculate x position: how far from the oldest sample
+    let x = (idx - (sweepPos + 1) + sweepBufferSize) % sweepBufferSize;
+    if (x < 0 || x >= sweepBufferSize || x >= audioCanvas.width) continue;
+    const v = sweepBuffer[idx];
+    const y = (1 - v) * audioCanvas.height / 2;
+    canvasCtx.beginPath();
+    canvasCtx.arc(x, y, 8, 0, 2 * Math.PI);
+    canvasCtx.fillStyle = '#FF851B';
+    canvasCtx.globalAlpha = 0.7;
+    canvasCtx.fill();
+    canvasCtx.globalAlpha = 1.0;
+    canvasCtx.lineWidth = 2;
+    canvasCtx.strokeStyle = '#fff';
+    canvasCtx.stroke();
+  }
 } 
