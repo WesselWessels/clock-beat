@@ -1,0 +1,53 @@
+body {
+  background: #f7f7f7;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 700px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 32px 24px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+#startStopBtn {
+  display: block;
+  margin: 0 auto 24px auto;
+  padding: 12px 32px;
+  font-size: 1.1em;
+  border: none;
+  border-radius: 4px;
+  background: #007bff;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+#startStopBtn:hover {
+  background: #0056b3;
+}
+
+#audioCanvas {
+  display: block;
+  margin: 0 auto 24px auto;
+  background: #222;
+  border-radius: 4px;
+}
+
+#results {
+  margin-top: 24px;
+}
+
+#intervals, #analysis {
+  margin-top: 12px;
+  font-size: 1.05em;
+  color: #333;
+} 
