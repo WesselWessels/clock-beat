@@ -21,6 +21,7 @@ let aboveThresholdBuffer = [];
 let lastDetectionIdx = -1000;
 let lastSweepPos = 0;
 let minDistancePx = 20;
+let lastPeakTimestamp = 0;
 
 const startStopBtn = document.getElementById('startStopBtn');
 const audioCanvas = document.getElementById('audioCanvas');
@@ -233,8 +234,7 @@ function updateIntervals() {
     .sort((a, b) => a.time - b.time);
 
   if (visiblePeaks.length < 4) {
-    intervalsDiv.textContent = 'Waiting for more ticks/tocks...';
-    analysisDiv.textContent = '';
+    hideResults();
     updateEvennessIndicator(null);
     return;
   }
@@ -246,37 +246,52 @@ function updateIntervals() {
   const t3 = last4[2].time;
   const t4 = last4[3].time;
   const total = (t4 - t1) * 1000;
-  const first = (t2 - t1) * 1000;
-  const second = (t4 - t3) * 1000;
-  const ratio = first / second;
+  const tick = (t2 - t1) * 1000;
+  const tock = (t4 - t3) * 1000;
+  const ratio = tick / tock;
 
-  intervalsDiv.textContent = `First: ${first.toFixed(1)} ms, Second: ${second.toFixed(1)} ms, Total: ${total.toFixed(1)} ms`;
-  analysisDiv.textContent = `Ratio (first/second): ${ratio.toFixed(3)}${Math.abs(ratio - 1) < 0.05 ? ' ✅ Good' : ''}`;
+  intervalsDiv.textContent = `Tick: ${tick.toFixed(1)} ms, Tock: ${tock.toFixed(1)} ms, Total: ${total.toFixed(1)} ms`;
+  analysisDiv.textContent = `Ratio (Tick/Tock): ${ratio.toFixed(3)}${Math.abs(ratio - 1) < 0.05 ? ' ✅ Good' : ''}`;
   updateEvennessIndicator(Math.abs(ratio - 1));
+  lastPeakTimestamp = Date.now();
+  showResults();
 }
+
+function hideResults() {
+  intervalsDiv.style.visibility = 'hidden';
+  analysisDiv.style.visibility = 'hidden';
+}
+
+function showResults() {
+  intervalsDiv.style.visibility = 'visible';
+  analysisDiv.style.visibility = 'visible';
+}
+
+// Timer to hide results if no new peaks in 2 seconds
+setInterval(() => {
+  if (Date.now() - lastPeakTimestamp > 2000) {
+    hideResults();
+  }
+}, 500);
 
 function updateEvennessIndicator(stddev) {
   // Clear
   evennessCtx.clearRect(0, 0, evennessCanvas.width, evennessCanvas.height);
+  if (stddev === null || stddev === undefined) {
+    evennessLabel.textContent = '';
+    return;
+  }
   let color = '#ccc';
-  let label = 'Waiting...';
-
-  // Check for recent tick/tock
-  const now = audioContext ? audioContext.currentTime : 0;
-  if (peakTimes.length === 0 || (now - lastPeakTime > 2)) {
-    color = '#888';
-    label = 'No ticks detected';
-  } else if (stddev !== null) {
-    if (stddev < 10) {
-      color = '#2ecc40'; // green
-      label = 'Even';
-    } else if (stddev < 30) {
-      color = '#ffdc00'; // yellow
-      label = 'Slightly uneven';
-    } else {
-      color = '#ff4136'; // red
-      label = 'Uneven';
-    }
+  let label = '';
+  if (stddev < 0.05) {
+    color = '#2ecc40'; // green
+    label = 'Even';
+  } else if (stddev < 0.15) {
+    color = '#ffdc00'; // yellow
+    label = 'Slightly uneven';
+  } else {
+    color = '#ff4136'; // red
+    label = 'Uneven';
   }
   // Draw circle
   evennessCtx.beginPath();
