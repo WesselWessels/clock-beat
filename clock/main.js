@@ -35,6 +35,7 @@ const thresholdValue = document.getElementById('thresholdValue');
 thresholdSlider.addEventListener('input', () => {
   threshold = parseFloat(thresholdSlider.value);
   thresholdValue.textContent = threshold.toFixed(2);
+  console.log('[Threshold] New threshold:', threshold);
 });
 
 startStopBtn.addEventListener('click', () => {
@@ -194,7 +195,17 @@ function detectTicks(dataArray) {
         // Calculate x position for this peak
         let x = (localMaxIdx - (sweepPos + 1) + bufferLen) % bufferLen;
         if (x >= 0 && x < audioCanvas.width) {
-          peakCircles.push({ x, value: localMax });
+          if (!peakCircles.some(c => c.x === x)) {
+            peakCircles.push({ x, value: localMax, time: audioContext.currentTime });
+            console.log('peakCircles', peakCircles);
+            if (audioContext) {
+                peakTimes.push(audioContext.currentTime);
+                // console.log('[Peak] Detected peak:', { value: localMax, x, time: audioContext.currentTime, distance: distance, minDistance: minDistance, now });
+                updateIntervals();
+            }
+          }
+          // Add the current time to peakTimes and update intervals
+          
         }
       }
     }
@@ -206,7 +217,12 @@ function detectTicks(dataArray) {
 }
 
 function updateIntervals() {
-  if (peakTimes.length < 2) {
+  // Only use peaks that are still visible on the canvas
+  const visiblePeaks = peakCircles
+    .filter(c => c.x >= 0 && typeof c.time === 'number')
+    .sort((a, b) => a.time - b.time);
+
+  if (visiblePeaks.length < 2) {
     intervalsDiv.textContent = 'Waiting for more ticks/tocks...';
     analysisDiv.textContent = '';
     updateEvennessIndicator(null);
@@ -214,10 +230,11 @@ function updateIntervals() {
   }
   // Calculate intervals in ms
   const intervals = [];
-  for (let i = 1; i < peakTimes.length; i++) {
-    intervals.push(((peakTimes[i] - peakTimes[i - 1]) * 1000).toFixed(1));
+  for (let i = 1; i < visiblePeaks.length; i++) {
+    intervals.push(((visiblePeaks[i].time - visiblePeaks[i - 1].time) * 1000).toFixed(1));
   }
   intervalsDiv.textContent = 'Intervals (ms): ' + intervals.join(', ');
+  console.log('[Intervals] Updated intervals (visible):', intervals);
   // Analyze evenness (last 6 intervals)
   let stddev = null;
   if (intervals.length >= 2) {
