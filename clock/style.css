@@ -40,8 +40,14 @@ h1 {
   margin: 0 auto 24px auto;
   background: #222;
   border-radius: 4px;
+  width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+#canvasWrapper {
+  width: 100%;
+  overflow-x: visible;
 }
 
 /* Add horizontal scroll for small screens */
@@ -51,8 +57,8 @@ h1 {
     padding: 16px 2px;
   }
   #audioCanvas {
-    width: 1200px;
-    min-width: 800px;
+    width: 100%;
+    min-width: 0;
   }
   body {
     overflow-x: auto;

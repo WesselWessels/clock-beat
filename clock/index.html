@@ -11,7 +11,9 @@
     <h1>Clock Tick/Tock Diagnostic Tool</h1>
     <button id="startStopBtn">Start</button>
     <button id="pauseBtn" style="margin-left: 10px;">Pause</button>
-    <canvas id="audioCanvas" width="1200" height="300"></canvas>
+    <div id="canvasWrapper" style="width: 100%; overflow-x: auto;">
+      <canvas id="audioCanvas" height="300" style="width: 100%; display: block;"></canvas>
+    </div>
     <div style="text-align:center; margin: 10px 0 20px 0;">
       <label for="thresholdSlider">Threshold: </label>
       <input type="range" id="thresholdSlider" min="0" max="1" step="0.01" value="0.2" style="width:300px;">
@@ -21,6 +23,11 @@
       <label for="widthSlider">Width: </label>
       <input type="range" id="widthSlider" min="1" max="100" step="1" value="20" style="width:300px;">
       <span id="widthValue">20</span>
+    </div>
+    <div style="text-align:center; margin: 10px 0 20px 0;">
+      <label for="gainSlider">Gain: </label>
+      <input type="range" id="gainSlider" min="0.1" max="200" step="0.1" value="100" style="width:300px;">
+      <span id="gainValue">100.0</span>
     </div>
     <div id="evennessIndicatorContainer" style="text-align:center; margin-bottom:16px;">
       <canvas id="evennessIndicator" width="40" height="40" style="vertical-align:middle;"></canvas>

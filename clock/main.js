@@ -22,6 +22,7 @@ let lastDetectionIdx = -1000;
 let lastSweepPos = 0;
 let minDistancePx = 20;
 let lastPeakTimestamp = 0;
+let gainNode;
 
 const startStopBtn = document.getElementById('startStopBtn');
 const audioCanvas = document.getElementById('audioCanvas');
@@ -49,6 +50,16 @@ widthSlider.addEventListener('input', () => {
   console.log('[Width] minDistancePx set to:', minDistancePx);
 });
 
+const gainSlider = document.getElementById('gainSlider');
+const gainValue = document.getElementById('gainValue');
+gainSlider.addEventListener('input', () => {
+  if (gainNode) {
+    gainNode.gain.value = parseFloat(gainSlider.value);
+    gainValue.textContent = gainSlider.value;
+    console.log('[Gain] gainNode.gain.value set to:', gainSlider.value);
+  }
+});
+
 startStopBtn.addEventListener('click', () => {
   if (!running) {
     startAudio();
@@ -68,11 +79,21 @@ pauseBtn.addEventListener('click', () => {
 async function startAudio() {
   try {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
     microphone = audioContext.createMediaStreamSource(stream);
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 2048;
-    microphone.connect(analyser);
+    // Add gain node
+    gainNode = audioContext.createGain();
+    gainNode.gain.value = parseFloat(gainSlider.value);
+    microphone.connect(gainNode);
+    gainNode.connect(analyser);
     running = true;
     startStopBtn.textContent = 'Stop';
     peakTimes = [];
@@ -340,4 +361,34 @@ function drawPeakCircles() {
     canvasCtx.strokeStyle = '#ff4136';
     canvasCtx.stroke();
   }
-} 
+}
+
+// Responsive canvas and buffer
+function resizeCanvasAndBuffer() {
+  // Set canvas width to match its displayed width
+  const displayWidth = audioCanvas.clientWidth;
+  audioCanvas.width = displayWidth;
+  // Reallocate sweepBuffer to match new width
+  const oldBuffer = sweepBuffer || [];
+  const oldSize = sweepBufferSize;
+  sweepBufferSize = displayWidth;
+  sweepBuffer = new Array(sweepBufferSize).fill(0);
+  // Copy as much old data as possible
+  if (oldBuffer.length > 0) {
+    for (let i = 0; i < Math.min(oldSize, sweepBufferSize); i++) {
+      sweepBuffer[(sweepPos + i) % sweepBufferSize] = oldBuffer[(sweepPos + i) % oldSize];
+    }
+  }
+  // Remove circles that are now off-canvas
+  peakCircles = peakCircles.filter(c => c.x < sweepBufferSize);
+}
+
+window.addEventListener('resize', () => {
+  resizeCanvasAndBuffer();
+});
+
+// Call on load
+resizeCanvasAndBuffer();
+
+// Update all x calculations in detectTicks and drawPeakCircles to use sweepBufferSize and audioCanvas.width
+// (existing code already uses these variables, so this will work responsively) 
