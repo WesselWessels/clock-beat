@@ -20,6 +20,7 @@ let lastAboveThreshold = false;
 let aboveThresholdBuffer = [];
 let lastDetectionIdx = -1000;
 let lastSweepPos = 0;
+let minDistancePx = 20;
 
 const startStopBtn = document.getElementById('startStopBtn');
 const audioCanvas = document.getElementById('audioCanvas');
@@ -37,6 +38,14 @@ thresholdSlider.addEventListener('input', () => {
   threshold = parseFloat(thresholdSlider.value);
   thresholdValue.textContent = threshold.toFixed(2);
   console.log('[Threshold] New threshold:', threshold);
+});
+
+const widthSlider = document.getElementById('widthSlider');
+const widthValue = document.getElementById('widthValue');
+widthSlider.addEventListener('input', () => {
+  minDistancePx = parseInt(widthSlider.value, 10);
+  widthValue.textContent = minDistancePx;
+  console.log('[Width] minDistancePx set to:', minDistancePx);
 });
 
 startStopBtn.addEventListener('click', () => {
@@ -183,7 +192,6 @@ function detectTicks(dataArray) {
   lastSweepPos = sweepPos;
 
   // For each new sample, check for threshold crossing
-  let minDistancePx = 20;
   let lastPeakIdx = peakCircles.length > 0 ? peakCircles[peakCircles.length - 1].bufferIdx : -minDistancePx;
   for (let idx of newSamples) {
     const prevIdx = (idx - 1 + sweepBufferSize) % sweepBufferSize;
@@ -311,5 +319,12 @@ function drawPeakCircles() {
     canvasCtx.arc(c.x, y, 3, 0, 2 * Math.PI);
     canvasCtx.fillStyle = '#ff4136';
     canvasCtx.fill();
+    // Draw a horizontal line through the circle for minDistancePx
+    canvasCtx.beginPath();
+    canvasCtx.moveTo(c.x - minDistancePx / 2, y);
+    canvasCtx.lineTo(c.x + minDistancePx / 2, y);
+    canvasCtx.lineWidth = 2;
+    canvasCtx.strokeStyle = '#ff4136';
+    canvasCtx.stroke();
   }
 } 
