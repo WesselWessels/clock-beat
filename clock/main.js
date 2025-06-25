@@ -232,29 +232,27 @@ function updateIntervals() {
     .filter(c => c.x >= 0 && typeof c.time === 'number')
     .sort((a, b) => a.time - b.time);
 
-  if (visiblePeaks.length < 2) {
+  if (visiblePeaks.length < 4) {
     intervalsDiv.textContent = 'Waiting for more ticks/tocks...';
     analysisDiv.textContent = '';
     updateEvennessIndicator(null);
     return;
   }
-  // Calculate intervals in ms
-  const intervals = [];
-  for (let i = 1; i < visiblePeaks.length; i++) {
-    intervals.push(((visiblePeaks[i].time - visiblePeaks[i - 1].time) * 1000).toFixed(1));
-  }
-  intervalsDiv.textContent = 'Intervals (ms): ' + intervals.join(', ');
-  console.log('[Intervals] Updated intervals (visible):', intervals);
-  // Analyze evenness (last 6 intervals)
-  let stddev = null;
-  if (intervals.length >= 2) {
-    const lastN = intervals.slice(-6).map(Number);
-    const mean = lastN.reduce((a, b) => a + b, 0) / lastN.length;
-    const variance = lastN.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / lastN.length;
-    stddev = Math.sqrt(variance);
-    analysisDiv.textContent = `Mean: ${mean.toFixed(1)} ms, Std Dev: ${stddev.toFixed(2)} ms`;
-  }
-  updateEvennessIndicator(stddev);
+
+  // Use only the most recent 4 peaks
+  const last4 = visiblePeaks.slice(-4);
+  const t1 = last4[0].time;
+  const t2 = last4[1].time;
+  const t3 = last4[2].time;
+  const t4 = last4[3].time;
+  const total = (t4 - t1) * 1000;
+  const first = (t2 - t1) * 1000;
+  const second = (t4 - t3) * 1000;
+  const ratio = first / second;
+
+  intervalsDiv.textContent = `First: ${first.toFixed(1)} ms, Second: ${second.toFixed(1)} ms, Total: ${total.toFixed(1)} ms`;
+  analysisDiv.textContent = `Ratio (first/second): ${ratio.toFixed(3)}${Math.abs(ratio - 1) < 0.05 ? ' ✅ Good' : ''}`;
+  updateEvennessIndicator(Math.abs(ratio - 1));
 }
 
 function updateEvennessIndicator(stddev) {
