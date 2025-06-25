@@ -19,6 +19,7 @@ let peakCircles = [];
 let lastAboveThreshold = false;
 let aboveThresholdBuffer = [];
 let lastDetectionIdx = -1000;
+let lastSweepPos = 0;
 
 const startStopBtn = document.getElementById('startStopBtn');
 const audioCanvas = document.getElementById('audioCanvas');
@@ -163,56 +164,57 @@ function drawThresholdLine() {
 }
 
 function detectTicks(dataArray) {
-  // Robust peak detection using the rolling sweepBuffer
-  // Check for threshold crossings in the sweepBuffer
-  let prevAbove = false;
-  let segmentStart = -1;
-  let now = sweepPos;
-  let bufferLen = sweepBufferSize;
-  let minDistance = Math.floor(0.2 * bufferLen / 60); // ~0.2s at 60fps
+  // Detect peaks only in the new samples written to sweepBuffer this frame
+  const bufferLength = analyser.fftSize;
+  let newSamples = [];
+  // Figure out which indices in sweepBuffer were just written
+  if (sweepPos >= lastSweepPos) {
+    for (let i = lastSweepPos; i < sweepPos; i++) {
+      newSamples.push(i);
+    }
+  } else {
+    for (let i = lastSweepPos; i < sweepBufferSize; i++) {
+      newSamples.push(i);
+    }
+    for (let i = 0; i < sweepPos; i++) {
+      newSamples.push(i);
+    }
+  }
+  lastSweepPos = sweepPos;
 
-  // Scan the visible buffer for threshold crossings
-  for (let i = 1; i < bufferLen; i++) {
-    let idxPrev = (now + i - 1) % bufferLen;
-    let idxCurr = (now + i) % bufferLen;
-    let vPrev = sweepBuffer[idxPrev];
-    let vCurr = sweepBuffer[idxCurr];
+  // For each new sample, check for threshold crossing
+  let minDistancePx = 20;
+  let lastPeakIdx = peakCircles.length > 0 ? peakCircles[peakCircles.length - 1].bufferIdx : -minDistancePx;
+  for (let idx of newSamples) {
+    const prevIdx = (idx - 1 + sweepBufferSize) % sweepBufferSize;
+    const vPrev = sweepBuffer[prevIdx];
+    const vCurr = sweepBuffer[idx];
     if (vPrev > threshold && vCurr <= threshold) {
       // Look back for local max in this segment
       let localMax = vPrev;
-      let localMaxIdx = idxPrev;
-      for (let j = idxPrev; j !== segmentStart && j !== now; j = (j - 1 + bufferLen) % bufferLen) {
+      let localMaxIdx = prevIdx;
+      let j = prevIdx;
+      while (sweepBuffer[j] > threshold) {
         if (sweepBuffer[j] > localMax) {
           localMax = sweepBuffer[j];
           localMaxIdx = j;
         }
-        if (sweepBuffer[j] <= threshold) break;
+        j = (j - 1 + sweepBufferSize) % sweepBufferSize;
+        if (j === idx) break; // avoid infinite loop
       }
-      // Debounce: only register if far enough from last detection
-      let distance = (localMaxIdx - lastDetectionIdx + bufferLen) % bufferLen;
-      if (distance > minDistance) {
-        lastDetectionIdx = localMaxIdx;
-        // Calculate x position for this peak
-        let x = (localMaxIdx - (sweepPos + 1) + bufferLen) % bufferLen;
-        if (x >= 0 && x < audioCanvas.width) {
-          if (!peakCircles.some(c => c.x === x)) {
-            peakCircles.push({ x, value: localMax, time: audioContext.currentTime });
-            console.log('peakCircles', peakCircles);
-            if (audioContext) {
-                peakTimes.push(audioContext.currentTime);
-                // console.log('[Peak] Detected peak:', { value: localMax, x, time: audioContext.currentTime, distance: distance, minDistance: minDistance, now });
-                updateIntervals();
-            }
-          }
-          // Add the current time to peakTimes and update intervals
-          
+      // Calculate x position for this peak
+      let x = (localMaxIdx - (sweepPos + 1) + sweepBufferSize) % sweepBufferSize;
+      // Debounce: only register if far enough from last peak
+      let distance = (localMaxIdx - lastPeakIdx + sweepBufferSize) % sweepBufferSize;
+      if (distance > minDistancePx && x >= 0 && x < audioCanvas.width) {
+        lastPeakIdx = localMaxIdx;
+        peakCircles.push({ x, value: localMax, bufferIdx: localMaxIdx, time: audioContext.currentTime });
+        if (audioContext) {
+          peakTimes.push(audioContext.currentTime);
+          updateIntervals();
         }
       }
     }
-    if (vCurr > threshold && !prevAbove) {
-      segmentStart = idxCurr;
-    }
-    prevAbove = vCurr > threshold;
   }
 }
 
@@ -292,11 +294,8 @@ function drawPeakCircles() {
     return c.x >= 0;
   });
   for (const c of peakCircles) {
-    // Use the buffer value at the current x position for the circle
-    // Calculate the buffer index corresponding to this x
-    let bufferIdx = (sweepPos + 1 + c.x) % sweepBufferSize;
-    let v = sweepBuffer[bufferIdx];
-    const y = (1 - v) * audioCanvas.height;
+    // Always use the stored value for y position
+    const y = (1 - c.value) * audioCanvas.height;
     // Draw the circle
     canvasCtx.beginPath();
     canvasCtx.arc(c.x, y, 8, 0, 2 * Math.PI);
